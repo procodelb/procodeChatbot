@@ -8,6 +8,8 @@ import time
 from typing import List, Optional, Any
 from dotenv import load_dotenv
 
+from google.api_core.exceptions import ResourceExhausted
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.chains import RetrievalQA
@@ -20,6 +22,16 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+@retry(
+    retry=retry_if_exception_type(ResourceExhausted),
+    wait=wait_exponential(multiplier=2, min=4, max=10),
+    stop=stop_after_attempt(3),
+)
+def get_answer(chain: RetrievalQA, question: str) -> Any:
+    return chain.invoke({"query": question})
+
 
 class RAGChatBot:
     """
@@ -46,11 +58,10 @@ class RAGChatBot:
         )
         
         # Initialize LLM
-        # Using 'gemini-flash-latest' to resolve 404 errors with specific version
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-flash-latest", 
-            google_api_key=self.api_key, 
-            temperature=0.3
+            model="gemini-2.5-flash-lite",
+            google_api_key=self.api_key,
+            temperature=0.3,
         )
         
         self.vector_store = None

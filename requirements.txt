@@ -5,3 +5,9 @@ langchain-google-genai
 faiss-cpu
 pypdf
 python-dotenv
+tenacity
+docx2txt
+openpyxl
+rapidocr-onnxruntime
+pillow
+pandas

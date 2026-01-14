@@ -6,8 +6,8 @@ import streamlit as st
 import os
 import tempfile
 from dotenv import load_dotenv
-from src.pdf_handler import PDFProcessor
-from src.rag_engine import RAGChatBot
+from src.file_handler import FileProcessor
+from src.rag_engine import RAGChatBot, get_answer
 
 # Load environment variables
 load_dotenv()
@@ -30,47 +30,52 @@ def main() -> None:
     with st.sidebar:
         st.title("Proc0deBot Settings 🤖")
         
-        # API Key Management
-        api_key = os.getenv("GOOGLE_API_KEY")
+        api_key = None
+        try:
+            api_key = st.secrets["GOOGLE_API_KEY"]  # may raise if secrets.toml missing
+            st.success("API Key loaded from Streamlit Secrets.")
+        except Exception:
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if api_key:
+                st.success("API Key loaded from environment.")
         if not api_key:
-            api_key = st.text_input("Enter Google API Key", type="password")
-            if not api_key:
-                st.warning("Please provide an API Key to proceed.")
-                st.stop()
-        else:
-            st.success("API Key loaded from environment.")
+            st.error("Missing GOOGLE_API_KEY. Configure it in Streamlit Secrets or environment.")
+            st.stop()
 
         st.divider()
         st.subheader("Upload Course Material")
-        pdf_docs = st.file_uploader("Upload PDFs", accept_multiple_files=True, type=['pdf'])
+        uploaded_files = st.file_uploader(
+            "Upload course files",
+            accept_multiple_files=True,
+            type=["pdf", "docx", "xlsx", "png", "jpg", "jpeg"],
+        )
         
         if st.button("Process Documents"):
-            if not pdf_docs:
-                st.warning("Please upload at least one PDF file.")
+            if not uploaded_files:
+                st.warning("Please upload at least one supported file.")
             else:
                 try:
                     with st.spinner("Analyzing course material..."):
                         all_chunks = []
-                        processor = PDFProcessor()
+                        processor = FileProcessor()
                         
-                        # Process each uploaded file
-                        for pdf in pdf_docs:
-                            # Create a temporary file
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                                tmp_file.write(pdf.getvalue())
+                        for uploaded_file in uploaded_files:
+                            suffix = os.path.splitext(uploaded_file.name)[1]
+                            if not suffix:
+                                suffix = ""
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+                                tmp_file.write(uploaded_file.getvalue())
                                 tmp_file_path = tmp_file.name
                             
                             try:
-                                # Process the file
-                                chunks = processor.process_pdf(tmp_file_path)
+                                chunks = processor.process_file(tmp_file_path)
                                 all_chunks.extend(chunks)
                             finally:
-                                # Clean up
                                 if os.path.exists(tmp_file_path):
                                     os.remove(tmp_file_path)
                         
                         if not all_chunks:
-                            st.error("Could not extract text from the provided PDFs.")
+                            st.error("Could not extract text from the provided files.")
                         else:
                             # Initialize ChatBot and Vector Store
                             rag_chatbot = RAGChatBot(api_key=api_key)
@@ -112,9 +117,9 @@ def main() -> None:
                     try:
                         # Get QA Chain
                         qa_chain = st.session_state.rag_chatbot.get_qa_chain()
-                        
-                        # Generate Response
-                        response = qa_chain.invoke({"query": user_input})
+
+                        # Generate Response with retry logic for rate limits
+                        response = get_answer(qa_chain, user_input)
                         result = response["result"]
                         
                         st.markdown(result)
