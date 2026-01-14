@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.dll
+*.dylib
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.python-version
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment & secrets
+.env
+*.env
+.streamlit/secrets.toml
+
+# Editors & OS
+.DS_Store
+.idea/
+.vscode/
+
+# Caches & logs
+.cache/
+logs/
+*.log
+
+# Project artifacts
+faiss_index/
+data/
+cache/
+
