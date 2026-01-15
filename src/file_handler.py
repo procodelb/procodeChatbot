@@ -8,9 +8,15 @@ from typing import List
 
 import pandas as pd
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
-from rapidocr_onnxruntime import RapidOCR
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
+
+try:
+    from rapidocr_onnxruntime import RapidOCR
+    _rapidocr_available = True
+except Exception:
+    RapidOCR = None
+    _rapidocr_available = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,7 +28,7 @@ class FileProcessor:
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
-        self.ocr = RapidOCR()
+        self.ocr = RapidOCR() if _rapidocr_available else None
 
     def process_pdf(self, file_path: str) -> List[Document]:
         try:
@@ -63,7 +69,8 @@ class FileProcessor:
                     parts.append(f"{column}: {value}")
                 if not parts:
                     continue
-                content = ", ".join(parts)
+                row_number = int(index) + 1
+                content = f"Row {row_number}: " + ", ".join(parts)
                 documents.append(
                     Document(
                         page_content=content,
@@ -76,6 +83,9 @@ class FileProcessor:
             return []
 
     def process_image(self, file_path: str) -> List[Document]:
+        error_text = "[Error: Image could not be processed due to missing system libraries]"
+        if self.ocr is None:
+            return [Document(page_content=error_text, metadata={"source": file_path})]
         try:
             result, _ = self.ocr(file_path)
             texts: List[str] = []
@@ -85,11 +95,11 @@ class FileProcessor:
                         texts.append(text)
             full_text = "\n".join(texts).strip()
             if not full_text:
-                full_text = "Warning: No text detected in image."
+                full_text = error_text
             return [Document(page_content=full_text, metadata={"source": file_path})]
         except Exception:
             logger.exception("Error processing image file")
-            return []
+            return [Document(page_content=error_text, metadata={"source": file_path})]
 
     def process_file(self, file_path: str) -> List[Document]:
         extension = os.path.splitext(file_path)[1].lower()

@@ -6,11 +6,26 @@ import streamlit as st
 import os
 import tempfile
 from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from src.file_handler import FileProcessor
 from src.rag_engine import RAGChatBot, get_answer
 
-# Load environment variables
 load_dotenv()
+
+@st.cache_resource
+def get_embeddings(api_key: str) -> GoogleGenerativeAIEmbeddings:
+    return GoogleGenerativeAIEmbeddings(
+        model="models/text-embedding-004",
+        google_api_key=api_key,
+    )
+
+@st.cache_resource
+def get_llm(api_key: str) -> ChatGoogleGenerativeAI:
+    return ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash-lite",
+        google_api_key=api_key,
+        temperature=0.3,
+    )
 
 def main() -> None:
     """
@@ -18,7 +33,6 @@ def main() -> None:
     """
     st.set_page_config(page_title="UniBot - Your AI Tutor", layout="wide")
     
-    # Initialize session state
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     if "vector_store" not in st.session_state:
@@ -26,21 +40,22 @@ def main() -> None:
     if "rag_chatbot" not in st.session_state:
         st.session_state.rag_chatbot = None
 
-    # --- Sidebar Configuration ---
     with st.sidebar:
         st.title("Proc0deBot Settings 🤖")
         
         api_key = None
         try:
-            api_key = st.secrets["GOOGLE_API_KEY"]  # may raise if secrets.toml missing
+            api_key = st.secrets["GOOGLE_API_KEY"]
             st.success("API Key loaded from Streamlit Secrets.")
         except Exception:
-            api_key = os.getenv("GOOGLE_API_KEY")
-            if api_key:
+            env_key = os.getenv("GOOGLE_API_KEY")
+            if env_key:
+                api_key = env_key
                 st.success("API Key loaded from environment.")
         if not api_key:
-            st.error("Missing GOOGLE_API_KEY. Configure it in Streamlit Secrets or environment.")
-            st.stop()
+            api_key = st.text_input("Enter Google API Key", type="password")
+        if not api_key:
+            st.warning("Please provide your Google API Key to continue.")
 
         st.divider()
         st.subheader("Upload Course Material")
@@ -51,7 +66,9 @@ def main() -> None:
         )
         
         if st.button("Process Documents"):
-            if not uploaded_files:
+            if not api_key:
+                st.error("Please provide a valid Google API Key before processing.")
+            elif not uploaded_files:
                 st.warning("Please upload at least one supported file.")
             else:
                 try:
@@ -77,13 +94,17 @@ def main() -> None:
                         if not all_chunks:
                             st.error("Could not extract text from the provided files.")
                         else:
-                            # Initialize ChatBot and Vector Store
-                            rag_chatbot = RAGChatBot(api_key=api_key)
+                            embeddings = get_embeddings(api_key)
+                            llm = get_llm(api_key)
+                            rag_chatbot = RAGChatBot(
+                                api_key=api_key,
+                                embeddings=embeddings,
+                                llm=llm,
+                            )
                             rag_chatbot.create_vector_store(all_chunks)
                             
-                            # Save to session state
                             st.session_state.rag_chatbot = rag_chatbot
-                            st.session_state.vector_store = rag_chatbot.vector_store # Explicitly tracking logic
+                            st.session_state.vector_store = rag_chatbot.vector_store
                             
                             st.success("Processing Complete! You can now chat.")
                             

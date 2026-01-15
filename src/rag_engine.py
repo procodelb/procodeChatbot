@@ -38,31 +38,41 @@ class RAGChatBot:
     The Brain of the application: Manages Embeddings, Vector Store, and QA Chain.
     """
     
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        embeddings: Optional[GoogleGenerativeAIEmbeddings] = None,
+        llm: Optional[ChatGoogleGenerativeAI] = None,
+    ):
         """
         Initialize the RAG ChatBot with Google GenAI models.
         
         Args:
             api_key (Optional[str]): The Google API key. If not provided, tries to load from env.
+            embeddings (Optional[GoogleGenerativeAIEmbeddings]): Pre-created embeddings instance.
+            llm (Optional[ChatGoogleGenerativeAI]): Pre-created chat model instance.
         """
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
             logger.error("GOOGLE_API_KEY not found in environment variables or arguments.")
             raise ValueError("GOOGLE_API_KEY is missing. Please set it in the .env file or provide it via settings.")
             
-        # Initialize Embeddings
-        # Updated to 'models/text-embedding-004' for better performance and rate limits
-        self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004", 
-            google_api_key=self.api_key
-        )
+        if embeddings is not None:
+            self.embeddings = embeddings
+        else:
+            self.embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/text-embedding-004",
+                google_api_key=self.api_key,
+            )
         
-        # Initialize LLM
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash-lite",
-            google_api_key=self.api_key,
-            temperature=0.3,
-        )
+        if llm is not None:
+            self.llm = llm
+        else:
+            self.llm = ChatGoogleGenerativeAI(
+                model="gemini-2.5-flash-lite",
+                google_api_key=self.api_key,
+                temperature=0.3,
+            )
         
         self.vector_store = None
 
